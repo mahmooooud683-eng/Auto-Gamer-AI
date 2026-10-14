@@ -8,21 +8,16 @@ export type InstalledGame = {
 
 type AutoGamerModuleType = {
   getInstalledGames(): Promise<InstalledGame[]>;
-
-  launchGame(
-    packageName: string
-  ): Promise<{ success: boolean }>;
-
+  launchGame(packageName: string): Promise<{ success: boolean }>;
+  openAccessibilitySettings(): void;
   isAccessibilityServiceConnected(): boolean;
-
   tap(x: number, y: number): Promise<boolean>;
-
   swipe(
     startX: number,
     startY: number,
     endX: number,
     endY: number,
-    durationMs?: number
+    durationMs: number
   ): Promise<boolean>;
 };
 
