@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Pressable,
   SafeAreaView,
@@ -18,35 +19,65 @@ export default function App() {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(null);
-  const [error, setError] = useState('');
+  const [serviceEnabled, setServiceEnabled] = useState(false);
 
-  const loadGames = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
-    setError('');
 
     try {
-      const installedGames = await AutoGamer.getInstalledGames();
-      setGames(installedGames);
-    } catch (e) {
-      setError(
-        'تعذّر تحميل الألعاب. تأكد من إعداد الموديول ثم أعد تشغيل التطبيق.'
+      const result = await AutoGamer.getInstalledGames();
+      setGames(result);
+    } catch (error) {
+      Alert.alert(
+        'تعذّر تحميل الألعاب',
+        'تأكد من إعداد الموديول وبناء التطبيق بشكل صحيح.'
       );
     } finally {
       setLoading(false);
     }
+
+    try {
+      setServiceEnabled(
+        AutoGamer.isAccessibilityServiceConnected()
+      );
+    } catch {
+      setServiceEnabled(false);
+    }
   }, []);
 
   useEffect(() => {
-    loadGames();
-  }, [loadGames]);
+    refresh();
 
-  const openGame = async (game) => {
+    const subscription = AppState.addEventListener(
+      'change',
+      (state) => {
+        if (state === 'active') {
+          refresh();
+        }
+      }
+    );
+
+    return () => subscription.remove();
+  }, [refresh]);
+
+  const openSettings = () => {
+    try {
+      AutoGamer.openAccessibilitySettings();
+    } catch {
+      Alert.alert('خطأ', 'تعذّر فتح إعدادات إمكانية الوصول.');
+    }
+  };
+
+  const launchGame = async (game) => {
     setOpening(game.packageName);
 
     try {
       await AutoGamer.launchGame(game.packageName);
-    } catch (e) {
-      Alert.alert('تعذّر فتح اللعبة', 'تأكد أن اللعبة ما زالت مثبّتة.');
+    } catch (error) {
+      Alert.alert(
+        'تعذّر فتح اللعبة',
+        error?.message || 'تأكد أن اللعبة مثبّتة.'
+      );
     } finally {
       setOpening(null);
     }
@@ -63,13 +94,13 @@ export default function App() {
 
       <Pressable
         style={styles.playButton}
-        onPress={() => openGame(item)}
+        onPress={() => launchGame(item)}
         disabled={opening !== null}
       >
         {opening === item.packageName ? (
-          <ActivityIndicator color="#111111" />
+          <ActivityIndicator color="#111" />
         ) : (
-          <Text style={styles.playText}>فتح</Text>
+          <Text style={styles.playText}>فتح اللعبة</Text>
         )}
       </Pressable>
     </View>
@@ -77,34 +108,59 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <StatusBar backgroundColor="#0A0A0A" barStyle="light-content" />
+      <StatusBar
+        backgroundColor="#0A0A0A"
+        barStyle="light-content"
+      />
 
       <View style={styles.header}>
-        <Text style={styles.logo}>AUTO GAMER</Text>
+        <Text style={styles.logo}>AUTO GAMER AI</Text>
         <Text style={styles.title}>مساعد الألعاب الذكي</Text>
         <Text style={styles.subtitle}>
-          ألعابك المثبّتة بمكان واحد
+          ألعابك بمكان واحد
+        </Text>
+      </View>
+
+      <View style={styles.controlCard}>
+        <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.statusDot,
+              serviceEnabled && styles.statusDotOn,
+            ]}
+          />
+          <Text style={styles.statusText}>
+            {serviceEnabled
+              ? 'خدمة التحكم متصلة'
+              : 'خدمة التحكم غير مفعّلة'}
+          </Text>
+        </View>
+
+        <Pressable
+          style={styles.settingsButton}
+          onPress={openSettings}
+        >
+          <Text style={styles.settingsButtonText}>
+            إعدادات التحكم
+          </Text>
+        </Pressable>
+
+        <Text style={styles.hint}>
+          فعّل الخدمة يدوياً من إعدادات أندرويد.
         </Text>
       </View>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>ألعاب الجهاز</Text>
-        <Pressable onPress={loadGames} disabled={loading}>
-          <Text style={styles.refresh}>تحديث القائمة ↻</Text>
+        <Pressable onPress={refresh} disabled={loading}>
+          <Text style={styles.refreshText}>تحديث ↻</Text>
         </Pressable>
       </View>
 
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#D6AD55" />
-          <Text style={styles.message}>عم نبحث عن الألعاب...</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable style={styles.retryButton} onPress={loadGames}>
-            <Text style={styles.playText}>إعادة المحاولة</Text>
-          </Pressable>
+          <Text style={styles.hint}>جارٍ تحميل القائمة...</Text>
         </View>
       ) : (
         <FlatList
@@ -114,9 +170,11 @@ export default function App() {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={styles.emptyTitle}>ما لقينا ألعاب</Text>
-              <Text style={styles.message}>
-                تأكد من تثبيت ألعاب فيها أيقونة تشغيل.
+              <Text style={styles.emptyTitle}>
+                ما لقينا ألعاب
+              </Text>
+              <Text style={styles.hint}>
+                تأكد من تثبيت ألعاب قابلة للتشغيل.
               </Text>
             </View>
           }
@@ -125,8 +183,8 @@ export default function App() {
 
       <View style={styles.footer}>
         <Text style={styles.footerTitle}>AUTO GAMER AI</Text>
-        <Text style={styles.footerText}>
-          الإصدار الأول • اكتشاف الألعاب وفتحها
+        <Text style={styles.footerSubtitle}>
+          اكتشاف الألعاب وفتحها والتحكم الأساسي
         </Text>
       </View>
     </SafeAreaView>
@@ -137,51 +195,94 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#0A0A0A',
-    paddingTop: 12,
+    paddingTop: 10,
   },
   header: {
-    paddingHorizontal: 22,
-    paddingTop: 28,
-    paddingBottom: 30,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 22,
     borderBottomWidth: 1,
-    borderBottomColor: '#292319',
+    borderBottomColor: '#302719',
   },
   logo: {
     color: '#D6AD55',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 3,
-    textAlign: 'center',
   },
   title: {
-    color: '#FFFFFF',
-    fontSize: 26,
+    color: '#FFF',
+    fontSize: 25,
     fontWeight: '900',
-    textAlign: 'center',
-    marginTop: 16,
+    marginTop: 13,
   },
   subtitle: {
-    color: '#A5A5A5',
+    color: '#999',
     fontSize: 14,
+    marginTop: 7,
+  },
+  controlCard: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#171717',
+    borderWidth: 1,
+    borderColor: '#493A20',
+    borderRadius: 16,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  statusDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#777',
+  },
+  statusDotOn: {
+    backgroundColor: '#5BD48A',
+  },
+  statusText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  settingsButton: {
+    marginTop: 15,
+    backgroundColor: '#D6AD55',
+    borderRadius: 11,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  settingsButtonText: {
+    color: '#111',
+    fontWeight: '900',
+    fontSize: 15,
+  },
+  hint: {
+    color: '#999',
+    fontSize: 12,
     textAlign: 'center',
-    marginTop: 9,
+    marginTop: 10,
+    lineHeight: 19,
   },
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 24,
     paddingBottom: 12,
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: '#FFF',
     fontSize: 18,
     fontWeight: '800',
   },
-  refresh: {
+  refreshText: {
     color: '#D6AD55',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   list: {
@@ -192,77 +293,54 @@ const styles = StyleSheet.create({
   gameCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 14,
+    marginBottom: 10,
     backgroundColor: '#171717',
-    borderColor: '#393024',
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 15,
-    marginBottom: 11,
+    borderColor: '#393024',
+    borderRadius: 14,
   },
   gameInfo: {
     flex: 1,
     marginEnd: 12,
   },
   gameName: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: '#FFF',
+    fontSize: 15,
     fontWeight: '800',
-    textAlign: 'left',
   },
   packageName: {
-    color: '#898989',
-    fontSize: 11,
-    marginTop: 6,
-    textAlign: 'left',
+    color: '#888',
+    fontSize: 10,
+    marginTop: 5,
   },
   playButton: {
     backgroundColor: '#D6AD55',
-    minWidth: 66,
+    paddingHorizontal: 13,
     minHeight: 42,
-    borderRadius: 11,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
   },
   playText: {
-    color: '#111111',
+    color: '#111',
+    fontSize: 12,
     fontWeight: '900',
-    fontSize: 14,
   },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
-  message: {
-    color: '#A5A5A5',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 14,
-    lineHeight: 22,
-  },
-  error: {
-    color: '#FF8D8D',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 23,
+    padding: 24,
   },
   emptyTitle: {
-    color: '#FFFFFF',
+    color: '#FFF',
     fontSize: 20,
     fontWeight: '800',
   },
-  retryButton: {
-    backgroundColor: '#D6AD55',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginTop: 18,
-  },
   footer: {
     alignItems: 'center',
-    paddingVertical: 17,
+    paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: '#292319',
   },
@@ -272,9 +350,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
   },
-  footerText: {
-    color: '#777777',
-    fontSize: 11,
+  footerSubtitle: {
+    color: '#777',
+    fontSize: 10,
     marginTop: 5,
   },
 });
