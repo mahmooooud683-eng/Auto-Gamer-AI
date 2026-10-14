@@ -37,8 +37,10 @@ class AutoGamerModule : Module() {
         .distinctBy { it.activityInfo.packageName }
         .mapNotNull { info ->
           val appInfo = info.activityInfo.applicationInfo
+          val launchIntent =
+            pm.getLaunchIntentForPackage(appInfo.packageName)
 
-          if (pm.getLaunchIntentForPackage(appInfo.packageName) == null) {
+          if (launchIntent == null) {
             null
           } else {
             mapOf(
@@ -68,11 +70,11 @@ class AutoGamerModule : Module() {
       val context = appContext.reactContext
         ?: throw Exception("Android context is unavailable")
 
-      val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-
-      context.startActivity(intent)
+      context.startActivity(
+        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+      )
     }
 
     Function("isAccessibilityServiceConnected") {
@@ -80,10 +82,22 @@ class AutoGamerModule : Module() {
     }
 
     AsyncFunction("tap") { x: Double, y: Double ->
-      val service = AutoGamerAccessibilityService.instance
-        ?: throw Exception("فعّل خدمة التحكم من إعدادات إمكانية الوصول أولاً")
+      val context = appContext.reactContext
+        ?: throw Exception("Android context is unavailable")
 
-      service.tap(x.toFloat(), y.toFloat())
+      val metrics = context.resources.displayMetrics
+      val result = AutoGamerEngine.tap(
+        x.toFloat(),
+        y.toFloat(),
+        metrics.widthPixels,
+        metrics.heightPixels
+      )
+
+      if (!result.success) {
+        throw Exception(result.message)
+      }
+
+      result.success
     }
 
     AsyncFunction("swipe") {
@@ -92,16 +106,25 @@ class AutoGamerModule : Module() {
         endX: Double,
         endY: Double,
         durationMs: Double ->
-      val service = AutoGamerAccessibilityService.instance
-        ?: throw Exception("فعّل خدمة التحكم من إعدادات إمكانية الوصول أولاً")
+      val context = appContext.reactContext
+        ?: throw Exception("Android context is unavailable")
 
-      service.swipe(
+      val metrics = context.resources.displayMetrics
+      val result = AutoGamerEngine.swipe(
         startX.toFloat(),
         startY.toFloat(),
         endX.toFloat(),
         endY.toFloat(),
+        metrics.widthPixels,
+        metrics.heightPixels,
         durationMs.toLong()
       )
+
+      if (!result.success) {
+        throw Exception(result.message)
+      }
+
+      result.success
     }
   }
 }
