@@ -4,6 +4,7 @@ package expo.modules.autogamer
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -36,10 +37,8 @@ class AutoGamerModule : Module() {
         .distinctBy { it.activityInfo.packageName }
         .mapNotNull { info ->
           val appInfo = info.activityInfo.applicationInfo
-          val launchIntent =
-            pm.getLaunchIntentForPackage(appInfo.packageName)
 
-          if (launchIntent == null) {
+          if (pm.getLaunchIntentForPackage(appInfo.packageName) == null) {
             null
           } else {
             mapOf(
@@ -63,6 +62,17 @@ class AutoGamerModule : Module() {
       context.startActivity(launchIntent)
 
       mapOf("success" to true)
+    }
+
+    Function("openAccessibilitySettings") {
+      val context = appContext.reactContext
+        ?: throw Exception("Android context is unavailable")
+
+      val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+
+      context.startActivity(intent)
     }
 
     Function("isAccessibilityServiceConnected") {
