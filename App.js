@@ -1,116 +1,134 @@
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
+  ActivityIndicator,
+  Alert,
+  FlatList,
   Pressable,
-  ScrollView,
+  SafeAreaView,
   StatusBar,
   StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
-const COLORS = {
-  bg: '#090B10',
-  card: '#141923',
-  gold: '#E8BD62',
-  white: '#FFFFFF',
-  muted: '#929AAA',
-  border: '#272E3B',
-};
-
-const GAME_TYPES = [
-  { id: 'puzzle', name: 'ألعاب الألغاز', icon: '🧩' },
-  { id: 'arcade', name: 'ألعاب المراحل', icon: '🎮' },
-  { id: 'racing', name: 'ألعاب السيارات', icon: '🏎️' },
-  { id: 'casual', name: 'ألعاب أخرى', icon: '🎯' },
-];
+import AutoGamer from './modules/auto-gamer';
 
 export default function App() {
-  const [selected, setSelected] = useState(null);
-  const [running, setRunning] = useState(false);
+  const [games, setGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [opening, setOpening] = useState(null);
+  const [error, setError] = useState('');
+
+  const loadGames = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const installedGames = await AutoGamer.getInstalledGames();
+      setGames(installedGames);
+    } catch (e) {
+      setError(
+        'تعذّر تحميل الألعاب. تأكد من إعداد الموديول ثم أعد تشغيل التطبيق.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadGames();
+  }, [loadGames]);
+
+  const openGame = async (game) => {
+    setOpening(game.packageName);
+
+    try {
+      await AutoGamer.launchGame(game.packageName);
+    } catch (e) {
+      Alert.alert('تعذّر فتح اللعبة', 'تأكد أن اللعبة ما زالت مثبّتة.');
+    } finally {
+      setOpening(null);
+    }
+  };
+
+  const renderGame = ({ item }) => (
+    <View style={styles.gameCard}>
+      <View style={styles.gameInfo}>
+        <Text style={styles.gameName}>{item.name}</Text>
+        <Text style={styles.packageName} numberOfLines={1}>
+          {item.packageName}
+        </Text>
+      </View>
+
+      <Pressable
+        style={styles.playButton}
+        onPress={() => openGame(item)}
+        disabled={opening !== null}
+      >
+        {opening === item.packageName ? (
+          <ActivityIndicator color="#111111" />
+        ) : (
+          <Text style={styles.playText}>فتح</Text>
+        )}
+      </Pressable>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.screen}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.bg}
-      />
+      <StatusBar backgroundColor="#0A0A0A" barStyle="light-content" />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.logo}>AUTO GAMER</Text>
-          <Text style={styles.version}>AI GAMING ASSISTANT</Text>
+      <View style={styles.header}>
+        <Text style={styles.logo}>AUTO GAMER</Text>
+        <Text style={styles.title}>مساعد الألعاب الذكي</Text>
+        <Text style={styles.subtitle}>
+          ألعابك المثبّتة بمكان واحد
+        </Text>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>ألعاب الجهاز</Text>
+        <Pressable onPress={loadGames} disabled={loading}>
+          <Text style={styles.refresh}>تحديث القائمة ↻</Text>
+        </Pressable>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#D6AD55" />
+          <Text style={styles.message}>عم نبحث عن الألعاب...</Text>
         </View>
-
-        <View style={styles.hero}>
-          <Text style={styles.robot}>🤖</Text>
-          <Text style={styles.title}>خلّي الروبوت يلعب عنك</Text>
-          <Text style={styles.subtitle}>
-            اختر لعبتك، والروبوت يحاول يتعلم كيف يلعبها تلقائياً.
-          </Text>
-          <View style={styles.status}>
-            <View style={styles.dot} />
-            <Text style={styles.statusText}>
-              {running ? 'بانتظار خدمة التحكم' : 'الروبوت متوقف'}
-            </Text>
-          </View>
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={styles.error}>{error}</Text>
+          <Pressable style={styles.retryButton} onPress={loadGames}>
+            <Text style={styles.playText}>إعادة المحاولة</Text>
+          </Pressable>
         </View>
-
-        <Text style={styles.sectionTitle}>أنواع الألعاب</Text>
-
-        {GAME_TYPES.map((game) => (
-          <Pressable
-            key={game.id}
-            onPress={() => {
-              setSelected(game.id);
-              setRunning(false);
-            }}
-            style={[
-              styles.gameCard,
-              selected === game.id && styles.selectedCard,
-            ]}
-          >
-            <Text style={styles.gameIcon}>{game.icon}</Text>
-            <View style={styles.gameInfo}>
-              <Text style={styles.gameName}>{game.name}</Text>
-              <Text style={styles.gameDescription}>
-                {selected === game.id
-                  ? 'تم اختيار هذا النوع'
-                  : 'اضغط للاختيار'}
+      ) : (
+        <FlatList
+          data={games}
+          keyExtractor={(item) => item.packageName}
+          renderItem={renderGame}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={styles.emptyTitle}>ما لقينا ألعاب</Text>
+              <Text style={styles.message}>
+                تأكد من تثبيت ألعاب فيها أيقونة تشغيل.
               </Text>
             </View>
-            <Text style={styles.arrow}>
-              {selected === game.id ? '✓' : '›'}
-            </Text>
-          </Pressable>
-        ))}
+          }
+        />
+      )}
 
-        <Pressable
-          disabled={!selected}
-          onPress={() => setRunning(true)}
-          style={[
-            styles.startButton,
-            !selected && styles.disabledButton,
-          ]}
-        >
-          <Text style={styles.startText}>تجهيز الروبوت</Text>
-        </Pressable>
-
-        {running && (
-          <View style={styles.notice}>
-            <Text style={styles.noticeTitle}>تم اختيار نوع الألعاب</Text>
-            <Text style={styles.noticeText}>
-              الواجهة جاهزة، لكن التحكم التلقائي لم يُفعّل بعد.
-              يلزم ربط خدمة أندرويد واكتشاف الألعاب المثبتة.
-            </Text>
-          </View>
-        )}
-
-        <Text style={styles.footer}>
-          AUTO GAMER AI · OFFLINE GAMES
+      <View style={styles.footer}>
+        <Text style={styles.footerTitle}>AUTO GAMER AI</Text>
+        <Text style={styles.footerText}>
+          الإصدار الأول • اكتشاف الألعاب وفتحها
         </Text>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -118,161 +136,145 @@ export default function App() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  content: {
-    padding: 22,
-    paddingBottom: 36,
+    backgroundColor: '#0A0A0A',
+    paddingTop: 12,
   },
   header: {
-    paddingTop: 22,
-    paddingBottom: 24,
-    alignItems: 'center',
+    paddingHorizontal: 22,
+    paddingTop: 28,
+    paddingBottom: 30,
+    borderBottomWidth: 1,
+    borderBottomColor: '#292319',
   },
   logo: {
-    color: COLORS.gold,
-    fontSize: 23,
+    color: '#D6AD55',
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: 3,
-  },
-  version: {
-    color: COLORS.muted,
-    fontSize: 10,
-    letterSpacing: 2,
-    marginTop: 7,
-  },
-  hero: {
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 22,
-    padding: 22,
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  robot: {
-    fontSize: 54,
-    marginBottom: 14,
+    textAlign: 'center',
   },
   title: {
-    color: COLORS.white,
-    fontSize: 22,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '900',
     textAlign: 'center',
+    marginTop: 16,
   },
   subtitle: {
-    color: COLORS.muted,
+    color: '#A5A5A5',
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 23,
-    marginTop: 12,
+    marginTop: 9,
   },
-  status: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    backgroundColor: '#202733',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 20,
-  },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: COLORS.gold,
-    marginRight: 8,
-  },
-  statusText: {
-    color: COLORS.gold,
-    fontSize: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 12,
   },
   sectionTitle: {
-    color: COLORS.white,
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 14,
-    textAlign: 'right',
+  },
+  refresh: {
+    color: '#D6AD55',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  list: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    flexGrow: 1,
   },
   gameCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.card,
+    backgroundColor: '#171717',
+    borderColor: '#393024',
     borderWidth: 1,
-    borderColor: COLORS.border,
     borderRadius: 16,
-    padding: 16,
+    padding: 15,
     marginBottom: 11,
-  },
-  selectedCard: {
-    borderColor: COLORS.gold,
-    backgroundColor: '#201E19',
-  },
-  gameIcon: {
-    fontSize: 29,
-    marginRight: 14,
   },
   gameInfo: {
     flex: 1,
+    marginEnd: 12,
   },
   gameName: {
-    color: COLORS.white,
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  gameDescription: {
-    color: COLORS.muted,
-    fontSize: 12,
-    marginTop: 6,
-    textAlign: 'right',
-  },
-  arrow: {
-    color: COLORS.gold,
-    fontSize: 24,
-    marginLeft: 12,
-  },
-  startButton: {
-    backgroundColor: COLORS.gold,
-    borderRadius: 15,
-    padding: 17,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  disabledButton: {
-    opacity: 0.4,
-  },
-  startText: {
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '900',
-  },
-  notice: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  noticeTitle: {
-    color: COLORS.gold,
-    fontSize: 15,
     fontWeight: '800',
-    textAlign: 'right',
+    textAlign: 'left',
   },
-  noticeText: {
-    color: COLORS.white,
-    fontSize: 13,
+  packageName: {
+    color: '#898989',
+    fontSize: 11,
+    marginTop: 6,
+    textAlign: 'left',
+  },
+  playButton: {
+    backgroundColor: '#D6AD55',
+    minWidth: 66,
+    minHeight: 42,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  playText: {
+    color: '#111111',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  message: {
+    color: '#A5A5A5',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 14,
     lineHeight: 22,
-    marginTop: 8,
-    textAlign: 'right',
+  },
+  error: {
+    color: '#FF8D8D',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 23,
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  retryButton: {
+    backgroundColor: '#D6AD55',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 18,
   },
   footer: {
-    color: COLORS.muted,
-    fontSize: 10,
-    textAlign: 'center',
-    marginTop: 30,
-    letterSpacing: 1,
+    alignItems: 'center',
+    paddingVertical: 17,
+    borderTopWidth: 1,
+    borderTopColor: '#292319',
+  },
+  footerTitle: {
+    color: '#D6AD55',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  footerText: {
+    color: '#777777',
+    fontSize: 11,
+    marginTop: 5,
   },
 });
