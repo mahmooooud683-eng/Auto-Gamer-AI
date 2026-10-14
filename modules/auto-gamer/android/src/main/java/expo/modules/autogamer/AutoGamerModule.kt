@@ -13,6 +13,7 @@ class AutoGamerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("AutoGamer")
 
+    // List launchable apps installed on the device.
     AsyncFunction("getInstalledGames") {
       val context = appContext.reactContext
         ?: throw Exception("Android context is unavailable")
@@ -52,6 +53,7 @@ class AutoGamerModule : Module() {
         .sortedBy { it["name"].toString().lowercase() }
     }
 
+    // Launch a selected installed app.
     AsyncFunction("launchGame") { packageName: String ->
       val context = appContext.reactContext
         ?: throw Exception("Android context is unavailable")
@@ -66,6 +68,7 @@ class AutoGamerModule : Module() {
       mapOf("success" to true)
     }
 
+    // Open Android accessibility settings.
     Function("openAccessibilitySettings") {
       val context = appContext.reactContext
         ?: throw Exception("Android context is unavailable")
@@ -81,6 +84,56 @@ class AutoGamerModule : Module() {
       AutoGamerAccessibilityService.instance != null
     }
 
+    // Read accessible elements from the active screen.
+    Function("readCurrentScreen") {
+      val service = AutoGamerAccessibilityService.instance
+
+      service?.readCurrentScreen() ?: mapOf(
+        "success" to false,
+        "message" to "Enable Auto Gamer accessibility service first",
+        "packageName" to "",
+        "elements" to emptyList<Map<String, Any>>(),
+        "totalElements" to 0,
+        "truncated" to false
+      )
+    }
+
+    // Find accessible screen elements by text or description.
+    Function("findScreenText") { query: String ->
+      val service = AutoGamerAccessibilityService.instance
+        ?: throw Exception("Enable accessibility service first")
+
+      val screen = service.readCurrentScreen()
+      val elements = screen["elements"] as? List<*>
+        ?: emptyList<Any>()
+
+      val normalized = query.trim().lowercase()
+
+      if (normalized.isEmpty()) {
+        emptyList<Map<String, Any>>()
+      } else {
+        elements.filterIsInstance<Map<*, *>>()
+          .filter { element ->
+            val text = element["text"]?.toString()
+              ?.lowercase().orEmpty()
+            val description = element["description"]?.toString()
+              ?.lowercase().orEmpty()
+
+            element["enabled"] == true &&
+              (
+                text.contains(normalized) ||
+                description.contains(normalized)
+              )
+          }
+          .map { element ->
+            element.entries.associate {
+              it.key.toString() to it.value
+            }
+          }
+      }
+    }
+
+    // Execute a tap through the gesture engine.
     AsyncFunction("tap") { x: Double, y: Double ->
       val context = appContext.reactContext
         ?: throw Exception("Android context is unavailable")
@@ -100,6 +153,7 @@ class AutoGamerModule : Module() {
       result.success
     }
 
+    // Execute a swipe through the gesture engine.
     AsyncFunction("swipe") {
         startX: Double,
         startY: Double,
