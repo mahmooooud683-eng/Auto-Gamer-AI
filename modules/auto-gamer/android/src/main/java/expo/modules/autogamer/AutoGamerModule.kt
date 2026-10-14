@@ -16,19 +16,19 @@ class AutoGamerModule : Module() {
       val context = appContext.reactContext
         ?: throw Exception("Android context is unavailable")
 
-      val packageManager = context.packageManager
+      val pm = context.packageManager
       val intent = Intent(Intent.ACTION_MAIN).apply {
         addCategory(Intent.CATEGORY_LAUNCHER)
       }
 
       val activities = if (Build.VERSION.SDK_INT >= 33) {
-        packageManager.queryIntentActivities(
+        pm.queryIntentActivities(
           intent,
           PackageManager.ResolveInfoFlags.of(0)
         )
       } else {
         @Suppress("DEPRECATION")
-        packageManager.queryIntentActivities(intent, 0)
+        pm.queryIntentActivities(intent, 0)
       }
 
       activities
@@ -37,13 +37,13 @@ class AutoGamerModule : Module() {
         .mapNotNull { info ->
           val appInfo = info.activityInfo.applicationInfo
           val launchIntent =
-            packageManager.getLaunchIntentForPackage(appInfo.packageName)
+            pm.getLaunchIntentForPackage(appInfo.packageName)
 
           if (launchIntent == null) {
             null
           } else {
             mapOf(
-              "name" to packageManager.getApplicationLabel(appInfo).toString(),
+              "name" to pm.getApplicationLabel(appInfo).toString(),
               "packageName" to appInfo.packageName
             )
           }
@@ -63,6 +63,35 @@ class AutoGamerModule : Module() {
       context.startActivity(launchIntent)
 
       mapOf("success" to true)
+    }
+
+    Function("isAccessibilityServiceConnected") {
+      AutoGamerAccessibilityService.instance != null
+    }
+
+    AsyncFunction("tap") { x: Double, y: Double ->
+      val service = AutoGamerAccessibilityService.instance
+        ?: throw Exception("فعّل خدمة التحكم من إعدادات إمكانية الوصول أولاً")
+
+      service.tap(x.toFloat(), y.toFloat())
+    }
+
+    AsyncFunction("swipe") {
+        startX: Double,
+        startY: Double,
+        endX: Double,
+        endY: Double,
+        durationMs: Double ->
+      val service = AutoGamerAccessibilityService.instance
+        ?: throw Exception("فعّل خدمة التحكم من إعدادات إمكانية الوصول أولاً")
+
+      service.swipe(
+        startX.toFloat(),
+        startY.toFloat(),
+        endX.toFloat(),
+        endY.toFloat(),
+        durationMs.toLong()
+      )
     }
   }
 }
